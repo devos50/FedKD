@@ -56,7 +56,7 @@ class FedKD:
         #path to save ckpt
         self.rootdir = f'./checkpoints/{args.dataset}/a{self.args.alpha}+sd{self.args.seed}+e{self.args.initepochs}+b{self.args.batchsize}'
         if not os.path.isdir(self.rootdir):
-            os.mkdir(self.rootdir)
+            os.makedirs(self.rootdir, exist_ok=True)
         if initpth:
             if not args.subpath:
                 if args.joint:
