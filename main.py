@@ -22,6 +22,7 @@ def get_args():
     # path
     parser.add_argument('--logfile', default='', type=str)
     parser.add_argument('--subpath', type=str, default ='') #subpath under localtraining folder to save central model
+    parser.add_argument('--checkpoint_path', type=str, default='')
 
     # local training
     parser.add_argument('--N_parties', type=int, default = 20)

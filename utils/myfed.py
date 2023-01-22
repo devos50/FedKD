@@ -54,7 +54,7 @@ class FedKD:
         
         # import ipdb; ipdb.set_trace()
         #path to save ckpt
-        self.rootdir = f'./checkpoints/{args.dataset}/a{self.args.alpha}+sd{self.args.seed}+e{self.args.initepochs}+b{self.args.batchsize}'
+        self.rootdir = f'./checkpoints/{args.dataset}/a{self.args.alpha}+sd{self.args.seed}+e{self.args.initepochs}+b{self.args.batchsize}' if not args.checkpoint_path else args.checkpoint_path
         if not os.path.isdir(self.rootdir):
             os.makedirs(self.rootdir, exist_ok=True)
         if initpth:
