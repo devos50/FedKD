@@ -14,7 +14,6 @@ import copy
 import random
 import loss.loss as Loss 
 import dataset.data_cifar as data_cifar
-from utils.das import get_das_nodes
 
 
 class FedKD:
@@ -95,12 +94,12 @@ class FedKD:
 
                 # Divide the clients over the DAS nodes
                 client_queue = list(range(self.args.N_parties))
+                batch = 0
                 while client_queue:
                     logging.info("Scheduling new batch on DAS nodes - %d clients left", len(client_queue))
-                    das_nodes = get_das_nodes(os.environ["SLURM_JOB_NODELIST"])
 
                     processes = []
-                    for das_node in das_nodes:
+                    for job_ind in range(self.args.dasjobs):
                         if not client_queue:
                             continue
 
@@ -111,8 +110,8 @@ class FedKD:
 
                         # Spawn the process!
                         subprocess_args = " ".join(sys.argv[1:]) + " --dasclients %s" % ",".join(clients_on_this_node)
-                        cmd = "ssh %s \"module load cuda11.7/toolkit/11.7 && source /home/spandey/venv3/bin/activate && PYTHONPATH=%s python3 %s/train_das_local_models.py %s\"" % (das_node, os.getcwd(), os.getcwd(), subprocess_args)
-                        logging.info("Command on %s: %s", das_node, cmd)
+                        cmd = "prun -t 24:00:00 -np 1 -o %s train_das_local_models.sh %s" % ("out_%d_%d.log" % (batch, job_ind), subprocess_args)
+                        logging.info("Command: %s", cmd)
                         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                         processes.append((p, cmd))
 
@@ -121,6 +120,8 @@ class FedKD:
                         logging.info("Command %s completed!", cmd)
                         if p.returncode != 0:
                             raise RuntimeError("Training subprocess exited with non-zero code %d" % p.returncode)
+
+                    batch += 1
             else:
                 logging.info("Will perform local training in parallel on the same machine")
                 client_queue = list(range(self.args.N_parties))
