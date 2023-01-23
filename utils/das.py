@@ -2,6 +2,10 @@ from typing import List
 
 
 def get_das_nodes(node_list_str: str) -> List[str]:
+    if "[" not in node_list_str and "]" not in node_list_str:
+        # Seems like there's only one node
+        return [node_list_str]
+
     # For example, node[301,303,305-320]
     das_node_list = []
     node_list_str = node_list_str[5:-1]

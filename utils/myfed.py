@@ -96,6 +96,7 @@ class FedKD:
                 # Divide the clients over the DAS nodes
                 client_queue = list(range(self.args.N_parties))
                 while client_queue:
+                    logging.info("Scheduling new batch on DAS nodes - %d clients left", len(client_queue))
                     das_nodes = get_das_nodes(os.environ["SLURM_JOB_NODELIST"])
 
                     processes = []
@@ -113,10 +114,11 @@ class FedKD:
                         cmd = "ssh %s \"module load cuda11.7/toolkit/11.7 && source /home/spandey/venv3/bin/activate && PYTHONPATH=%s python3 %s/train_das_local_models.py %s\"" % (das_node, os.getcwd(), os.getcwd(), subprocess_args)
                         logging.info("Command on %s: %s", das_node, cmd)
                         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                        processes.append(p)
+                        processes.append((p, cmd))
 
-                    for p in processes:
+                    for p, cmd in processes:
                         p.wait()
+                        logging.info("Command %s completed!", cmd)
                         if p.returncode != 0:
                             raise RuntimeError("Training subprocess exited with non-zero code %d" % p.returncode)
             else:
