@@ -64,7 +64,7 @@ def dirichlet_datasplit(args, privtype='cifar10', publictype='cifar100', N_parti
     splitname = f'./splitfile/{privtype}/{args.alpha}_{args.seed}.npy'
     if os.path.exists(splitname):
         split_arr =  np.load(splitname)
-        assert split_arr.shape == (N_class, N_parties)
+        assert split_arr.shape == (N_class, N_parties), "Expected shape %s but got %s" % ((N_class, N_parties), split_arr.shape)
     else:
         split_arr = np.random.dirichlet([args.alpha]*N_parties, N_class)#nclass*N_parties
         np.save(splitname, split_arr)
