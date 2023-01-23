@@ -19,9 +19,8 @@ from utils.das import get_das_nodes
 
 class FedKD:
     def __init__(self, central, distil_loader, private_data, val_loader, 
-                   writer, args, localmodel=None):
+                   writer, args, prepare_single_client=None):
         # import ipdb; ipdb.set_trace()
-        self.localmodel = localmodel
         self.localmodels = []
         self.central = central
         self.N_parties = args.N_parties
@@ -80,10 +79,13 @@ class FedKD:
         if not os.path.isdir(self.savedir):
             os.makedirs(self.savedir, exist_ok=True)
 
-        if self.localmodel is None:
+        if not prepare_single_client:
+            logging.info("Preparing local models for all clients")
             self.localmodels = utils.copy_parties(self.N_parties, self.central)
         else:
-            self.localmodels = utils.copy_parties(self.N_parties, self.localmodel)
+            logging.info("Only preparing model of client %d", prepare_single_client)
+            self.localmodels = [None] * self.N_parties
+            self.localmodels[prepare_single_client] = utils.clone_model(self.central)
 
     def init_locals(self):
         epochs = self.args.initepochs
