@@ -30,6 +30,7 @@ def get_args():
     parser.add_argument('--das', action='store_true')
     parser.add_argument('--dasjobs', type=int, default=1)
     parser.add_argument('--dasclients', type=str, default='')
+    parser.add_argument('--loadfromcheckpoint', action='store_true')
 
     # fed setting
     parser.add_argument('--fedrounds', type=int, default=200)

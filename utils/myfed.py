@@ -87,6 +87,15 @@ class FedKD:
             self.localmodels[prepare_single_client] = utils.clone_model(self.central)
 
     def init_locals(self):
+        if self.args.loadfromcheckpoint:
+            # Load all these models from the checkpoint directory
+            logging.info("Loading local models from checkpoint directory %s", self.rootdir)
+            for n in range(self.N_parties):
+                savename = os.path.join(self.rootdir, str(n) + '.pt')
+                logging.info(f'Loading local model {n} from checkpoint')
+                utils.load_dict(savename, self.localmodels[n])
+            return
+
         epochs = self.args.initepochs
         if self.args.ltparallel:
             if self.args.das:
