@@ -1,4 +1,7 @@
 import os
+import subprocess
+import sys
+
 import numpy as np
 import logging
 import torch 
@@ -14,9 +17,10 @@ import dataset.data_cifar as data_cifar
 
 class FedKD:
     def __init__(self, central, distil_loader, private_data, val_loader, 
-                   writer, args, initpth=True, localmodel=None):
+                   writer, args, localmodel=None):
         # import ipdb; ipdb.set_trace()
         self.localmodel = localmodel
+        self.localmodels = []
         self.central = central
         self.N_parties = args.N_parties
         self.distil_loader = distil_loader
@@ -31,13 +35,17 @@ class FedKD:
             totalN.append(private_data[n]['x'].shape[0])
         totalN = torch.tensor(totalN) #nlocal
         assert totalN.sum() == 50000
-        self.totalN = totalN.cuda()#nlocal*1*1
+        self.totalN = totalN
+        if args.can_gpu:
+            self.totalN = self.totalN.cuda()
         countN = np.zeros((self.N_parties, self.args.N_class))
         for n in range(self.N_parties):
             for m in range(self.args.N_class):
                 countN[n][m] = (self.private_data[n]['y']==m).sum()
         assert countN.sum() == 50000
-        self.countN = torch.tensor(countN).cuda()      
+        self.countN = torch.tensor(countN)
+        if args.can_gpu:
+            self.countN = self.countN.cuda()
         self.locallist= list(range(0, self.N_parties))# local number list
         self.clscnt = args.clscnt# if ensemble is weighted by number of local sample
         self.voteout = args.voteout
@@ -57,32 +65,56 @@ class FedKD:
         self.rootdir = f'./checkpoints/{args.dataset}/a{self.args.alpha}+sd{self.args.seed}+e{self.args.initepochs}+b{self.args.batchsize}' if not args.checkpoint_path else args.checkpoint_path
         if not os.path.isdir(self.rootdir):
             os.makedirs(self.rootdir, exist_ok=True)
-        if initpth:
-            if not args.subpath:
-                if args.joint:
-                    args.subpath = f'joint_c{args.C}_s{args.steps_round}_lr{args.dis_lr}_{args.dis_lrmin}'
-                elif args.oneshot:
-                    args.subpath = f'oneshot_c{args.C}_q{args.quantify}_n{args.noisescale}'
-                else:
-                    args.subpath = f'oneshot_c{args.C}_q{args.quantify}_n{args.noisescale}'
-            self.savedir = os.path.join(self.rootdir, args.subpath)
-            if not os.path.isdir(self.savedir):
-                os.mkdir(self.savedir)
-        self.init_locals(initpth, init_dir='')
 
-    def init_locals(self, initpth=True, init_dir=''):
-        epochs = self.args.initepochs
+        if not args.subpath:
+            if args.joint:
+                args.subpath = f'joint_c{args.C}_s{args.steps_round}_lr{args.dis_lr}_{args.dis_lrmin}'
+            elif args.oneshot:
+                args.subpath = f'oneshot_c{args.C}_q{args.quantify}_n{args.noisescale}'
+            else:
+                args.subpath = f'oneshot_c{args.C}_q{args.quantify}_n{args.noisescale}'
+
+        self.savedir = os.path.join(self.rootdir, args.subpath)
+        if not os.path.isdir(self.savedir):
+            os.mkdir(self.savedir)
+
         if self.localmodel is None:
             self.localmodels = utils.copy_parties(self.N_parties, self.central)
         else:
             self.localmodels = utils.copy_parties(self.N_parties, self.localmodel)
-        if not init_dir:
-            init_dir = self.rootdir
-        if initpth:
+
+    def init_locals(self):
+        epochs = self.args.initepochs
+        if self.args.ltparallel:
+            client_queue = list(range(self.args.N_parties))
+            clients_being_processed = []
+            processes = []
+            while True:
+                while client_queue and len(processes) < self.args.ltparallel:
+                    cur_client = client_queue.pop(0)
+                    clients_being_processed.append(cur_client)
+                    p = subprocess.Popen(["python3", "train_local_model.py"] + sys.argv[1:] + ["--cindex", "%d" % cur_client])
+                    processes.append(p)
+
+                logging.info(f"Performing local training with {self.args.ltparallel} subprocesses for clients {clients_being_processed}")
+
+                for p in processes:
+                    p.wait()
+                    if p.returncode != 0:
+                        raise RuntimeError("Training subprocess exited with non-zero code %d" % p.returncode)
+                processes = []
+
+                # Load the trained models
+                for client in clients_being_processed:
+                    savename = os.path.join(self.rootdir, str(client) + '.pt')
+                    assert os.path.exists(savename), "Model at path %s should exist" % savename
+                    utils.load_dict(savename, self.localmodels[client])
+                clients_being_processed = []
+        else:
+            logging.info("Performing local training without parallelization")
             for n in range(self.N_parties):
-                savename = os.path.join(init_dir, str(n)+'.pt')
+                savename = os.path.join(self.rootdir, str(n)+'.pt')
                 if os.path.exists(savename):
-                    #self.localmodels[n].load_state_dict(self.best_statdict, strict=True)
                     logging.info(f'Loading Local{n}......')
                     utils.load_dict(savename, self.localmodels[n])
                     acc = self.validate_model(self.localmodels[n])
@@ -90,7 +122,9 @@ class FedKD:
                     logging.info(f'Init Local{n}, Epoch={epochs}......')
                     acc = self.trainLocal(savename, modelid=n)
                 logging.info(f'Init Local{n}--Epoch={epochs}, Acc:{(acc):.2f}')
-     
+
+        logging.info("Local training completed!")
+
     def init_central(self):
         initname = os.path.join(self.rootdir, self.args.initcentral)
         if os.path.exists(initname):
@@ -377,8 +411,9 @@ class FedKD:
             tracc = utils.AverageMeter()
             trloss = utils.AverageMeter()
             for i, (images, target, _) in enumerate(train_loader):
-                images = images.cuda()
-                target = target.cuda()
+                if self.args.can_gpu:
+                    images = images.cuda()
+                    target = target.cuda()
                 output = model(images)
                 # import ipdb; ipdb.set_trace()
                 loss = criterion(output, target)
@@ -397,8 +432,9 @@ class FedKD:
             testacc = utils.AverageMeter()
             with torch.no_grad():
                 for i, (images, target, _) in enumerate(test_loader):
-                    images = images.cuda()
-                    target = target.cuda()
+                    if self.args.can_gpu:
+                        images = images.cuda()
+                        target = target.cuda()
                     output = model(images)
                     acc, = utils.accuracy(output, target)
                     testacc.update(acc)
