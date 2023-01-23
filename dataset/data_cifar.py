@@ -61,7 +61,7 @@ def dirichlet_datasplit(args, privtype='cifar10', publictype='cifar100', N_parti
         subpath = 'cifar-100-python/'
         N_class = 100
     
-    splitname = f'./splitfile/{privtype}/{args.alpha}_{args.seed}.npy'
+    splitname = f'./splitfile/{privtype}/{args.alpha}_{args.seed}_{args.N_parties}.npy'
     if os.path.exists(splitname):
         split_arr =  np.load(splitname)
         assert split_arr.shape == (N_class, N_parties), "Expected shape %s but got %s" % ((N_class, N_parties), split_arr.shape)
