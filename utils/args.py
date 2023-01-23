@@ -27,6 +27,8 @@ def get_args():
     parser.add_argument('--optim', type=str, default='ADAM')
     parser.add_argument('--ltparallel', type=int, default=None)
     parser.add_argument('--cindex', type=int, default=None)  # Client index, used for parallel local training
+    parser.add_argument('--das', action='store_true')
+    parser.add_argument('--dasclients', type=str, default='')
 
     # fed setting
     parser.add_argument('--fedrounds', type=int, default=200)

@@ -14,6 +14,8 @@ import copy
 import random
 import loss.loss as Loss 
 import dataset.data_cifar as data_cifar
+from utils.das import get_das_nodes
+
 
 class FedKD:
     def __init__(self, central, distil_loader, private_data, val_loader, 
@@ -76,7 +78,7 @@ class FedKD:
 
         self.savedir = os.path.join(self.rootdir, args.subpath)
         if not os.path.isdir(self.savedir):
-            os.mkdir(self.savedir)
+            os.makedirs(self.savedir, exist_ok=True)
 
         if self.localmodel is None:
             self.localmodels = utils.copy_parties(self.N_parties, self.central)
@@ -86,30 +88,61 @@ class FedKD:
     def init_locals(self):
         epochs = self.args.initepochs
         if self.args.ltparallel:
-            client_queue = list(range(self.args.N_parties))
-            clients_being_processed = []
-            processes = []
-            while True:
-                while client_queue and len(processes) < self.args.ltparallel:
-                    cur_client = client_queue.pop(0)
-                    clients_being_processed.append(cur_client)
-                    p = subprocess.Popen(["python3", "train_local_model.py"] + sys.argv[1:] + ["--cindex", "%d" % cur_client])
-                    processes.append(p)
+            if self.args.das:
+                logging.info("Will perform local training in parallel on the DAS infrastructure")
 
-                logging.info(f"Performing local training with {self.args.ltparallel} subprocesses for clients {clients_being_processed}")
+                # Divide the clients over the DAS nodes
+                client_queue = list(range(self.args.N_parties))
+                while client_queue:
+                    das_nodes = get_das_nodes(os.environ["SLURM_JOB_NODELIST"])
 
-                for p in processes:
-                    p.wait()
-                    if p.returncode != 0:
-                        raise RuntimeError("Training subprocess exited with non-zero code %d" % p.returncode)
-                processes = []
+                    processes = []
+                    for das_node in das_nodes:
+                        if not client_queue:
+                            continue
 
-                # Load the trained models
-                for client in clients_being_processed:
-                    savename = os.path.join(self.rootdir, str(client) + '.pt')
-                    assert os.path.exists(savename), "Model at path %s should exist" % savename
-                    utils.load_dict(savename, self.localmodels[client])
+                        clients_on_this_node = []
+                        while client_queue and len(clients_on_this_node) < self.args.ltparallel:
+                            client = client_queue.pop(0)
+                            clients_on_this_node.append("%d" % client)
+
+                        # Spawn the process!
+                        subprocess_args = " ".join(sys.argv[1:]) + " --dasclients %s" % ",".join(clients_on_this_node)
+                        cmd = "ssh %s \"module load cuda11.7/toolkit/11.7 && source /home/spandey/venv3/bin/activate && PYTHONPATH=%s python3 %s/train_das_local_models.py %s\"" % (das_node, os.getcwd(), os.getcwd(), subprocess_args)
+                        logging.info("Command on %s: %s", das_node, cmd)
+                        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        processes.append(p)
+
+                    for p in processes:
+                        p.wait()
+                        if p.returncode != 0:
+                            raise RuntimeError("Training subprocess exited with non-zero code %d" % p.returncode)
+            else:
+                logging.info("Will perform local training in parallel on the same machine")
+                client_queue = list(range(self.args.N_parties))
                 clients_being_processed = []
+                processes = []
+                while True:
+                    while client_queue and len(processes) < self.args.ltparallel:
+                        cur_client = client_queue.pop(0)
+                        clients_being_processed.append(cur_client)
+                        p = subprocess.Popen(["python3", "train_local_model.py"] + sys.argv[1:] + ["--cindex", "%d" % cur_client])
+                        processes.append(p)
+
+                    logging.info(f"Performing local training with {self.args.ltparallel} subprocesses for clients {clients_being_processed}")
+
+                    for p in processes:
+                        p.wait()
+                        if p.returncode != 0:
+                            raise RuntimeError("Training subprocess exited with non-zero code %d" % p.returncode)
+                    processes = []
+
+                    # Load the trained models
+                    for client in clients_being_processed:
+                        savename = os.path.join(self.rootdir, str(client) + '.pt')
+                        assert os.path.exists(savename), "Model at path %s should exist" % savename
+                        utils.load_dict(savename, self.localmodels[client])
+                    clients_being_processed = []
         else:
             logging.info("Performing local training without parallelization")
             for n in range(self.N_parties):

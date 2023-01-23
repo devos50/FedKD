@@ -1,3 +1,5 @@
+import socket
+
 from tensorboardX import SummaryWriter
 
 from datetime import datetime
@@ -6,6 +8,7 @@ import models.resnet8 as resnet8
 from dataset import setup_dataset
 
 from utils.args import get_args
+from utils.das import get_das_nodes
 from utils.myfed import *
 
 if __name__ == "__main__":
@@ -38,6 +41,14 @@ if __name__ == "__main__":
         format='%(asctime)s - %(levelname)s - %(message)s', handlers=handlers,     
     )
     logging.info(args)
+
+    # Check if we are in DAS mode
+    if args.das:
+        das_nodes = get_das_nodes(os.environ["SLURM_JOB_NODELIST"])
+        logging.info("DAS nodes: %s, my host: %s", das_nodes, socket.gethostname())
+        if socket.gethostname() != das_nodes[0]:
+            logging.warning("In DAS node and not running on the main node - exiting")
+            exit()
     
     # 1. Setup datasets
     priv_data, public_dataset, distill_loader, test_loader = setup_dataset(args)

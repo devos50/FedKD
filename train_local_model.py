@@ -22,7 +22,7 @@ if __name__ == "__main__":
     )
 
     args.can_gpu = torch.cuda.is_available()
-    writer = SummaryWriter(comment=args.logfile)
+    writer = SummaryWriter(comment="%d" % args.cindex)
 
     args.N_class = 10 if args.dataset == 'cifar10' else 100
     model = resnet8.ResNet8(num_classes=args.N_class)
