@@ -440,6 +440,7 @@ class FedKD:
                                     weight_decay=3e-4)
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, float(epochs), eta_min=args.lrmin,)
+        logging.info("Start training for client %d, data samples: %d", modelid, len(tr_dataset))
         #
         bestacc = 0 
         bestname = ''
