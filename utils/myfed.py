@@ -438,8 +438,8 @@ class FedKD:
         optimizer = optim.SGD(model.parameters(), args.lr,
                                     momentum=0.9,
                                     weight_decay=3e-4)
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(
-                optimizer, float(epochs), eta_min=args.lrmin,)
+        # scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        #         optimizer, float(epochs), eta_min=args.lrmin,)
         logging.info("Start training for client %d, data samples: %d", modelid, len(tr_dataset))
         #
         bestacc = 0 
@@ -488,7 +488,7 @@ class FedKD:
                     os.system(f'cp {bestname} {savename}')
                 logging.info(f'{modelid},Size={datasize},Epoch={epoch}: testacc={testacc.avg}, Best======{bestacc}======')
             #
-            scheduler.step()
+            optimizer.step()
 
         return bestacc
        
