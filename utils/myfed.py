@@ -578,21 +578,24 @@ class FedKD:
                         localweight = localweight.unsqueeze(dim=1).unsqueeze(dim=2)#nlocal*1*1
                 
                 loss = self.distill_batch_oneshot(self.central, images, idx, selectN, localweight, optimizer)
-                step += 1
-                acc = self.validate_model(self.central)
                 if self.writer is not None:
                     self.writer.add_scalar('loss', loss.item(), step)
-                    self.writer.add_scalar('DisACC', acc, step)
-                if acc>bestacc:
-                    if bestname:
-                        os.system(f'rm {bestname}')
-                    bestacc = acc
-                    bestname = f'{savename}_i{step}_{(bestacc):.2f}.pt'
-                    torch.save(self.central.state_dict(), bestname)
-                    logging.info(f'========Best...Iter{step},Epoch{epoch}, Acc{(acc):.2f}')
+                step += 1
             scheduler.step()
+
+            acc = self.validate_model(self.central)
+            if self.writer is not None:
+                self.writer.add_scalar('DisACC', acc, step)
+            if acc > bestacc:
+                if bestname:
+                    os.system(f'rm {bestname}')
+                bestacc = acc
+                bestname = f'{savename}_i{step}_{(bestacc):.2f}.pt'
+                torch.save(self.central.state_dict(), bestname)
+                logging.info(f'========Best...Iter{step},Epoch{epoch}, Acc{(acc):.2f}')
+
             logging.info(f'Iter{step},Epoch{epoch}, Acc{(acc):.2f}')
-        
+
 
 class FedKDwQN(FedKD):
     def distill_onemodel_batch(self, model, images, selectN, localweight, optimizer, usecentral=True):
