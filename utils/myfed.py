@@ -151,7 +151,7 @@ class FedKD:
         else:
             logging.info("Performing local training without parallelization")
             for n in range(self.N_parties):
-                savename = os.path.join(self.rootdir, "cifar10_%d.model" % n)
+                savename = os.path.join(self.rootdir, str(n)+'.pt')
                 if os.path.exists(savename):
                     logging.info(f'Loading Local{n}......')
                     utils.load_dict(savename, self.localmodels[n])
